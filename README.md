@@ -1,8 +1,10 @@
-# MetaClean - Secure Metadata Sanitization Tool
+<div align="center">
+  <img src="metadata-cleaner/public/logo.png" alt="MetaClean Logo" width="120" />
+  <h1>MetaClean</h1>
+  <h3>Secure Metadata Sanitization Tool</h3>
+</div>
 
 **MetaClean** is a privacy-focused web application designed to strip sensitive metadata from your digital files. Whether it's GPS coordinates in photos, author information in documents, or hidden properties in media files, MetaClean ensures your data remains private before you share it.
-
-![MetaClean Snapshot](https://via.placeholder.com/800x400?text=MetaClean+Dashboard)
 
 ## Features
 
@@ -40,7 +42,7 @@
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/yourusername/metadata-cleaner.git
+git clone https://github.com/abhinavRajput1/metadata-sanitisor.git
 cd metadata-cleaner
 ```
 
