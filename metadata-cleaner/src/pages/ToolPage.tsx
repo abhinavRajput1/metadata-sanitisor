@@ -1,9 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import FileUploader from '../components/tool/FileUploader';
-import { generateMockMetadata, type Metadata } from '../utils/metadata';
+import { type Metadata } from '../utils/metadata';
 import {
-    FileText, Image, Trash2, CheckCircle, AlertTriangle, Shield,
-    Download, RefreshCw, X, MoreVertical, File, Film, Music, Archive
+    FileText, Image, CheckCircle, AlertTriangle, Shield,
+    Download, RefreshCw, File, Film, Music
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -20,7 +20,6 @@ interface FileItem {
 const ToolPage = () => {
     const [files, setFiles] = useState<FileItem[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [isProcessingAll, setIsProcessingAll] = useState(false);
 
     const handleUpload = async (uploadedFiles: FileList | null) => {
         if (!uploadedFiles) return;
@@ -103,7 +102,7 @@ const ToolPage = () => {
         files.filter(f => f.status === 'ready').forEach(f => handleSanitize(f.id));
     };
 
-    const handleDownload = (id: string, filename: string) => {
+    const handleDownload = (id: string, _filename: string) => {
         window.open(`/api/download/${id}`, '_blank');
     };
 
