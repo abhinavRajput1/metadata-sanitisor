@@ -42,7 +42,7 @@ const ToolPage = () => {
             formData.append('file', fileItem.file);
 
             try {
-                const response = await fetch('http://localhost:3001/api/upload', {
+                const response = await fetch('/api/upload', {
                     method: 'POST',
                     body: formData,
                 });
@@ -77,7 +77,7 @@ const ToolPage = () => {
         setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'sanitizing', progress: 0 } : f));
 
         try {
-            const response = await fetch(`http://localhost:3001/api/sanitize/${id}`, {
+            const response = await fetch(`/api/sanitize/${id}`, {
                 method: 'POST'
             });
 
@@ -104,7 +104,7 @@ const ToolPage = () => {
     };
 
     const handleDownload = (id: string, filename: string) => {
-        window.open(`http://localhost:3001/api/download/${id}`, '_blank');
+        window.open(`/api/download/${id}`, '_blank');
     };
 
     const selectedFile = files.find(f => f.id === selectedId);
