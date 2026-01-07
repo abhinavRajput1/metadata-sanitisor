@@ -18,10 +18,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = Path("uploads")
-CLEANED_DIR = Path("cleaned")
-UPLOAD_DIR.mkdir(exist_ok=True)
-CLEANED_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR = Path("/tmp/uploads")
+CLEANED_DIR = Path("/tmp/cleaned")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+CLEANED_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
