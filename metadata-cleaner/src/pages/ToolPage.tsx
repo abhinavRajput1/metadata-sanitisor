@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-type FileStatus = 'scanning' | 'ready' | 'sanitizing' | 'done';
+type FileStatus = 'scanning' | 'ready' | 'sanitizing' | 'done' | 'error';
 
 interface FileItem {
     id: string;
@@ -67,7 +67,8 @@ const ToolPage = () => {
 
             } catch (error) {
                 console.error("Upload error:", error);
-                setFiles(prev => prev.map(f => f.file === fileItem.file ? { ...f, status: 'scanning' /* error state TODO */ } : f));
+                console.error("Upload error:", error);
+                setFiles(prev => prev.map(f => f.file === fileItem.file ? { ...f, status: 'error' } : f));
             }
         }
     };
@@ -155,6 +156,7 @@ const ToolPage = () => {
                                         <p className="text-xs text-secondary-500">{(file.file.size / 1024).toFixed(1)} KB</p>
                                     </div>
                                     {file.status === 'scanning' && <RefreshCw className="w-4 h-4 animate-spin text-secondary-400" />}
+                                    {file.status === 'error' && <AlertTriangle className="w-4 h-4 text-red-500" />}
                                     {file.status === 'ready' && <AlertTriangle className={`w-4 h-4 ${file.metadata["Risk Level"] === 'High' ? 'text-red-500' : 'text-yellow-500'}`} />}
                                     {file.status === 'sanitizing' && <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />}
                                     {file.status === 'done' && <CheckCircle className="w-4 h-4 text-primary-500" />}
@@ -217,6 +219,11 @@ const ToolPage = () => {
                             <div className="flex-1 flex flex-col items-center justify-center text-secondary-400">
                                 <RefreshCw className="w-12 h-12 animate-spin mb-4" />
                                 <p>Analyzing file structure...</p>
+                            </div>
+                        ) : selectedFile.status === 'error' ? (
+                            <div className="flex-1 flex flex-col items-center justify-center text-red-400">
+                                <AlertTriangle className="w-12 h-12 mb-4" />
+                                <p>Error analyzing file. Please try again.</p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
