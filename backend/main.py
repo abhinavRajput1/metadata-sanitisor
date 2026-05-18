@@ -1,11 +1,14 @@
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Dict, Any
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from metadata_utils import extract_metadata, remove_metadata
+
+FILE_ID_PATTERN = re.compile(r"^[a-f0-9]{16}$")
 
 app = FastAPI()
 
@@ -46,8 +49,9 @@ async def upload_file(file: UploadFile = File(...)):
 
 @app.post("/api/sanitize/{file_id}")
 async def sanitize_file(file_id: str):
+    if not FILE_ID_PATTERN.match(file_id):
+        raise HTTPException(status_code=400, detail="Invalid file id")
     try:
-        # Find file in uploads
         files = list(UPLOAD_DIR.glob(f"{file_id}.*"))
         if not files:
             raise HTTPException(status_code=404, detail="File not found")
@@ -58,16 +62,77 @@ async def sanitize_file(file_id: str):
         remove_metadata(original_path, cleaned_path)
         
         return {"status": "done", "id": file_id}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post("/api/sanitize-file")
+async def sanitize_file_inline(file: UploadFile = File(...)):
+    """Stateless sanitize: process file in one request (required for serverless)."""
+    try:
+        file_id = os.urandom(8).hex()
+        safe_name = Path(file.filename or "file").name
+        file_ext = Path(safe_name).suffix
+        input_path = UPLOAD_DIR / f"{file_id}{file_ext}"
+        output_path = CLEANED_DIR / f"{file_id}{file_ext}"
+
+        with open(input_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        remove_metadata(input_path, output_path)
+
+        if not output_path.exists():
+            raise HTTPException(status_code=500, detail="Failed to create cleaned file")
+
+        def iterfile():
+            with open(output_path, "rb") as f:
+                while chunk := f.read(65536):
+                    yield chunk
+
+        media_type = file.content_type or "application/octet-stream"
+        return StreamingResponse(
+            iterfile(),
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="clean_{safe_name}"',
+                "X-File-Id": file_id,
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/download/{file_id}")
 async def download_file(file_id: str):
-    files = list(CLEANED_DIR.glob(f"{file_id}.*"))
-    if not files:
+    if not FILE_ID_PATTERN.match(file_id):
         raise HTTPException(status_code=404, detail="File not found")
-    
-    return FileResponse(files[0], filename=f"clean_{files[0].name}")
+    try:
+        files = list(CLEANED_DIR.glob(f"{file_id}.*"))
+        if not files:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        cleaned_path = files[0]
+
+        def iterfile():
+            with open(cleaned_path, "rb") as f:
+                while chunk := f.read(65536):
+                    yield chunk
+
+        return StreamingResponse(
+            iterfile(),
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="clean_{cleaned_path.name}"',
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

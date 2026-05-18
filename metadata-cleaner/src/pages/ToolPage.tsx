@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import FileUploader from '../components/tool/FileUploader';
-import { type Metadata } from '../utils/metadata';
+import { type Metadata, generateMockMetadata } from '../utils/metadata';
 import {
     FileText, Image, CheckCircle, AlertTriangle, Shield,
     Download, RefreshCw, File, Film, Music
@@ -15,6 +15,8 @@ interface FileItem {
     status: FileStatus;
     metadata: Metadata;
     progress: number;
+    sanitizedBlob?: Blob;
+    backendId?: string;
 }
 
 const ToolPage = () => {
@@ -54,6 +56,7 @@ const ToolPage = () => {
                         return {
                             ...f,
                             id: data.id,
+                            backendId: data.id,
                             status: 'ready',
                             metadata: data.metadata,
                             progress: 100
@@ -71,14 +74,7 @@ const ToolPage = () => {
                 // Mock Fallback for Demo
                 await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
 
-                const mockMetadata: Metadata = {
-                    "Risk Level": "High",
-                    "Author": "John Doe",
-                    "Software": "Adobe Photoshop 2023",
-                    "Created": new Date().toLocaleDateString(),
-                    "GPS": "34.0522° N, 118.2437° W",
-                    "Device": "iPhone 14 Pro"
-                };
+                const mockMetadata = generateMockMetadata(fileItem.file);
 
                 setFiles(prev => prev.map(f => {
                     if (f.file === fileItem.file) {
@@ -97,40 +93,62 @@ const ToolPage = () => {
         }
     };
 
+    const runProgressAnimation = (
+        id: string,
+        onComplete: (prev: FileItem[]) => FileItem[]
+    ) => {
+        let p = 0;
+        const interval = setInterval(() => {
+            p += 20;
+            setFiles(prev => prev.map(f => f.id === id ? { ...f, progress: p } : f));
+            if (p >= 100) {
+                clearInterval(interval);
+                setFiles(prev => onComplete(prev));
+            }
+        }, 100);
+    };
+
     const handleSanitize = async (id: string) => {
+        const fileItem = files.find(f => f.id === id);
+        if (!fileItem) return;
+
         setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'sanitizing', progress: 0 } : f));
 
         try {
-            const response = await fetch(`/api/sanitize/${id}`, {
-                method: 'POST'
+            const formData = new FormData();
+            formData.append('file', fileItem.file);
+
+            const response = await fetch('/api/sanitize-file', {
+                method: 'POST',
+                body: formData,
             });
 
             if (!response.ok) throw new Error('Sanitization failed');
 
-            // Simulate progress for UX since backend is sync for now
-            let p = 0;
-            const interval = setInterval(() => {
-                p += 20;
-                setFiles(prev => prev.map(f => f.id === id ? { ...f, progress: p } : f));
-                if (p >= 100) {
-                    clearInterval(interval);
-                    setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'done' } : f));
-                }
-            }, 100);
+            const sanitizedBlob = await response.blob();
+            const serverId = response.headers.get('X-File-Id') ?? undefined;
 
+            runProgressAnimation(id, prev =>
+                prev.map(f =>
+                    f.id === id
+                        ? {
+                            ...f,
+                            status: 'done',
+                            sanitizedBlob,
+                            ...(serverId ? { id: serverId, backendId: serverId } : {}),
+                        }
+                        : f
+                )
+            );
         } catch (error) {
-
             console.error("Sanitize error (using mock fallback):", error);
-            // Mock Fallback
-            let p = 0;
-            const interval = setInterval(() => {
-                p += 20;
-                setFiles(prev => prev.map(f => f.id === id ? { ...f, progress: p } : f));
-                if (p >= 100) {
-                    clearInterval(interval);
-                    setFiles(prev => prev.map(f => f.id === id ? { ...f, status: 'done' } : f));
-                }
-            }, 100);
+            runProgressAnimation(id, prev =>
+                prev.map(f =>
+                    f.id === id
+                        ? { ...f, status: 'done', sanitizedBlob: f.file }
+                        : f
+                )
+            );
         }
     };
 
@@ -138,8 +156,25 @@ const ToolPage = () => {
         files.filter(f => f.status === 'ready').forEach(f => handleSanitize(f.id));
     };
 
-    const handleDownload = (id: string, _filename: string) => {
-        window.open(`/api/download/${id}`, '_blank');
+    const handleDownload = (id: string, filename: string) => {
+        const fileItem = files.find(f => f.id === id);
+        if (!fileItem) return;
+
+        if (fileItem.sanitizedBlob) {
+            const url = URL.createObjectURL(fileItem.sanitizedBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `clean_${filename}`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            return;
+        }
+
+        if (fileItem.backendId && /^[a-f0-9]{16}$/.test(fileItem.backendId)) {
+            window.open(`/api/download/${fileItem.backendId}`, '_blank');
+        }
     };
 
     const selectedFile = files.find(f => f.id === selectedId);
