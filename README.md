@@ -88,3 +88,4 @@ MetaClean is designed with privacy as its core tenet. We do not retain uploaded 
 
 ## License
 MIT
+$env:ADMIN_SECRET="Adminhubhai"; python main.py 

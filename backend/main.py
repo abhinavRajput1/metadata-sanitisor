@@ -1,14 +1,22 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import re
 import shutil
 from pathlib import Path
 from typing import Dict, Any
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from metadata_utils import extract_metadata, remove_metadata
+from audit_logger import log_event, get_logs, get_log_count, compute_sha256
 
 FILE_ID_PATTERN = re.compile(r"^[a-f0-9]{16}$")
+
+# Admin secret for accessing sensitive log fields (IP addresses).
+# Set via environment variable; leave empty to disable admin access.
+ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "")
 
 app = FastAPI()
 
@@ -48,7 +56,7 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/sanitize/{file_id}")
-async def sanitize_file(file_id: str):
+async def sanitize_file(file_id: str, request: Request):
     if not FILE_ID_PATTERN.match(file_id):
         raise HTTPException(status_code=400, detail="Invalid file id")
     try:
@@ -60,7 +68,17 @@ async def sanitize_file(file_id: str):
         cleaned_path = CLEANED_DIR / original_path.name
         
         remove_metadata(original_path, cleaned_path)
-        
+
+        log_event(
+            filename=original_path.name,
+            action="Full Strip",
+            status="Success",
+            file_size_bytes=original_path.stat().st_size,
+            file_id=file_id,
+            file_hash=compute_sha256(original_path),
+            ip_address=request.client.host if request.client else None,
+        )
+
         return {"status": "done", "id": file_id}
     except HTTPException:
         raise
@@ -69,7 +87,7 @@ async def sanitize_file(file_id: str):
 
 
 @app.post("/api/sanitize-file")
-async def sanitize_file_inline(file: UploadFile = File(...)):
+async def sanitize_file_inline(request: Request, file: UploadFile = File(...)):
     """Stateless sanitize: process file in one request (required for serverless)."""
     try:
         file_id = os.urandom(8).hex()
@@ -82,6 +100,16 @@ async def sanitize_file_inline(file: UploadFile = File(...)):
             shutil.copyfileobj(file.file, buffer)
 
         remove_metadata(input_path, output_path)
+
+        log_event(
+            filename=safe_name,
+            action="Full Strip",
+            status="Success",
+            file_size_bytes=input_path.stat().st_size,
+            file_id=file_id,
+            file_hash=compute_sha256(input_path),
+            ip_address=request.client.host if request.client else None,
+        )
 
         if not output_path.exists():
             raise HTTPException(status_code=500, detail="Failed to create cleaned file")
@@ -133,6 +161,19 @@ async def download_file(file_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/logs")
+async def list_logs(limit: int = 50, offset: int = 0, admin_key: str = ""):
+    """Return sanitization audit logs, newest first.
+
+    Pass ?admin_key=<ADMIN_SECRET> to include IP addresses in the response.
+    """
+    is_admin = bool(ADMIN_SECRET) and admin_key == ADMIN_SECRET
+    return {
+        "logs": get_logs(limit=limit, offset=offset, include_ip=is_admin),
+        "total": get_log_count(),
+        "admin": is_admin,
+    }
 
 if __name__ == "__main__":
     import uvicorn

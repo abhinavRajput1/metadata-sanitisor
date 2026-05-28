@@ -7,3 +7,4 @@ mutagen
 python-docx
 openpyxl
 python-pptx
+python-dotenv
