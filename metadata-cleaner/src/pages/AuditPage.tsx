@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ShieldCheck, Download, Search, File, RefreshCw, Inbox, Lock, Unlock, Hash } from 'lucide-react';
+import { ShieldCheck, Download, Search, File, RefreshCw, Inbox, Lock, Unlock, Hash, AlertTriangle, Info } from 'lucide-react';
 
 interface LogEntry {
     id: string;
@@ -24,9 +24,13 @@ const AuditPage = () => {
     const [adminInput, setAdminInput] = useState('');
     const [isAdmin, setIsAdmin] = useState(false);
     const [showAdminPrompt, setShowAdminPrompt] = useState(false);
+    const [fetchError, setFetchError] = useState(false);
+
+    const isHosted = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
 
     const fetchLogs = useCallback(async () => {
         try {
+            setFetchError(false);
             const params = new URLSearchParams({ limit: '100', offset: '0' });
             if (adminKey) params.set('admin_key', adminKey);
             const res = await fetch(`/api/logs?${params}`);
@@ -37,6 +41,7 @@ const AuditPage = () => {
             setIsAdmin(data.admin ?? false);
         } catch (err) {
             console.error('Failed to load audit logs:', err);
+            setFetchError(true);
         } finally {
             setLoading(false);
         }
@@ -204,6 +209,18 @@ const AuditPage = () => {
                     <RefreshCw className="w-10 h-10 animate-spin mb-4" />
                     <p className="font-medium">Loading audit logs…</p>
                 </div>
+            ) : fetchError ? (
+                <div className="flex flex-col items-center justify-center py-24 text-secondary-400">
+                    <AlertTriangle className="w-12 h-12 mb-4 text-amber-400" />
+                    <p className="font-medium text-lg text-secondary-600">Could not load audit logs</p>
+                    <p className="text-sm mt-1">The logging API may be unavailable. Try refreshing.</p>
+                    <button
+                        onClick={fetchLogs}
+                        className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium text-sm hover:bg-primary-700 transition flex items-center gap-1.5"
+                    >
+                        <RefreshCw className="w-3.5 h-3.5" /> Retry
+                    </button>
+                </div>
             ) : filteredLogs.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-24 text-secondary-400">
                     <Inbox className="w-12 h-12 mb-4" />
@@ -213,6 +230,18 @@ const AuditPage = () => {
                     <p className="text-sm mt-1">
                         {search ? 'Try a different search term.' : 'Sanitize a file and your activity will appear here.'}
                     </p>
+                    {isHosted && !search && (
+                        <div className="mt-6 max-w-md mx-auto p-4 bg-blue-50 border border-blue-200 rounded-xl text-blue-700 text-sm flex items-start gap-3">
+                            <Info className="w-5 h-5 shrink-0 mt-0.5" />
+                            <div>
+                                <p className="font-medium">Hosted environment detected</p>
+                                <p className="mt-1 text-blue-600">
+                                    Audit logs on Vercel are session-based and not persisted across deployments.
+                                    Sanitize a file to see logs for this session. For persistent logging, run the app locally or connect a database.
+                                </p>
+                            </div>
+                        </div>
+                    )}
                 </div>
             ) : (
                 <div className="bg-white border border-secondary-200 rounded-xl overflow-hidden shadow-sm">
