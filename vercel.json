@@ -19,7 +19,9 @@
             "dest": "/backend/main.py"
         },
         {
-            "handle": "filesystem"
+            "src": "/(.*)",
+            "dest": "/metadata-cleaner/$1",
+            "check": true
         },
         {
             "src": "/(.*)",
